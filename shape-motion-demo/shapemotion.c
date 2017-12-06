@@ -159,7 +159,7 @@ void mlAdvance(MovLayer *ml, Region *fence)
 }
 
 
-u_int bgColor = COLOR_BLUE;     /**< The background color */
+u_int bgColor = COLOR_GREEN;     /**< The background color */
 int redrawScreen = 1;           /**< Boolean for whether screen needs to be redrawn */
 
 Region fieldFence;		/**< fence around playing field  */
@@ -189,6 +189,27 @@ void main()
 
   enableWDTInterrupts();      /**< enable periodic interrupt */
   or_sr(0x8);	              /**< GIE (enable interrupts) */
+  drawString5x7(0,0, "P1 SCORE: ", COLOR_WHITE, COLOR_GREEN);
+  drawString5x7(72,152,":SCORE P2 ", COLOR_WHITE, COLOR_GREEN);
+  for(;;) { 
+    while (!redrawScreen) { /**< Pause CPU if screen doesn't need updating */
+      P1OUT &= ~GREEN_LED;    /**< Green led off witHo CPU */
+      or_sr(0x10);	      /**< CPU OFF */
+    }
+    P1OUT |= GREEN_LED;       /**< Green led on when CPU on */
+    redrawScreen = 0;
+    movLayerDraw(&ml0, &padel_right);
+  }
+}
+
+/** Watchdog timer interrupt handler. 15 interrupts/sec */
+void wdt_c_handler()
+{
+  static short count = 0;
+  P1OUT |= GREEN_LED;		      /**< Green LED on when cpu on */
+  count ++;
+  if (count == 15) {
+    
 
 
   for(;;) { 
@@ -209,15 +230,12 @@ void wdt_c_handler()
   P1OUT |= GREEN_LED;		      /**< Green LED on when cpu on */
   count ++;
   if (count == 15) {
+    //int switches = ~p2sw_read();    
     mlAdvance(&ml0, &fieldFence);
     if (p2sw_read()){
       redrawScreen = 1;
-      if (switches & BIT1){
-	ml.velocity.axes[1] = 3;
-      }
-      
     }
     count = 0;
   } 
   P1OUT &= ~GREEN_LED;		    /**< Green LED off when cpu off */
-}
+}}
