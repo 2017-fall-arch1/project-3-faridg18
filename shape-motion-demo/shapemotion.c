@@ -210,8 +210,13 @@ void wdt_c_handler()
   count ++;
   if (count == 15) {
     mlAdvance(&ml0, &fieldFence);
-    if (p2sw_read())
+    if (p2sw_read()){
       redrawScreen = 1;
+      if (switches & BIT1){
+	ml.velocity.axes[1] = 3;
+      }
+      
+    }
     count = 0;
   } 
   P1OUT &= ~GREEN_LED;		    /**< Green LED off when cpu off */
