@@ -1,11 +1,3 @@
-/** \file shapemotion.c
- *  \brief This is a simple shape motion demo.
- *  This demo creates two layers containing shapes.
- *  One layer contains a rectangle and the other a circle.
- *  While the CPU is running the green LED is on, and
- *  when the screen does not need to be redrawn the CPU
- *  is turned off along with the green LED.
- */  
 #include <msp430.h>
 #include <libTimer.h>
 #include <lcdutils.h>
@@ -13,72 +5,66 @@
 #include <p2switches.h>
 #include <shape.h>
 #include <abCircle.h>
+#include "buzzer.h"
 
-#define GREEN_LED BIT6
+#define GREEN_LED BIT6;
 
-AbRect ball = {abRectGetBounds, abRectCheck, {3,3}}; /**< 10x10 rectangle */
-AbRect padel = {abRectGetBounds, abRectCheck, {18,3}};
+u_int scorep1 = 0;
+u_int scorep2 = 0;
+u_int start = 0;
+static int play = 0;
+AbRect left_paddle = {abRectGetBounds, abRectCheck,{3,19}};
+AbRect right_paddle = {abRectGetBounds, abRectCheck,{3,19}};
+AbRect ball = {abRectGetBounds, abRectCheck, {3,3}};
 
 AbRectOutline fieldOutline = {	/* playing field */
   abRectOutlineGetBounds, abRectOutlineCheck,   
-  {screenWidth/2-1, screenHeight/2-1}
+  {screenWidth/2 - 1, screenHeight/2 - 1}
 };
 
-Layer layer4 = {
-  (AbShape *) &ball,
-  {(screenWidth/2)+5, (screenHeight/2)+5}, /**< bit below & right of center */
-  {0,0}, {0,0},				    /* last & next pos */
-  COLOR_PINK,
+Layer layer0 = {	//contains the ball      
+  (AbShape *)&ball,
+  {(screenWidth/2)+10, (screenHeight/2)+5},
+  {0,0}, {0,0},			  
+  COLOR_WHITE,
   0
 };
-Layer padel_right = {
-  (AbShape *) &padel,
-  {(screenWidth/2)+50, (screenHeight/2)+50}, /**< bit below & right of center */
-  {0,0}, {0,0},				    /* last & next pos */
-  COLOR_BLACK,
-  0
-};
-
-Layer padel_left = {
-  (AbShape *)&padel,
-  {(screenWidth/2)-65, (screenHeight/2)-65}, /**< bit below & right of center */
-  {0,0}, {0,0},				    /* last & next pos */
-  COLOR_BLACK,
-  0
-};
-
-Layer layer3 = {		/**< Layer with an orange circle */
-  (AbShape *)&circle8,
-  {(screenWidth/2)+10, (screenHeight/2)+5}, /**< bit below & right of center */
-  {0,0}, {0,0},				    /* last & next pos */
-  COLOR_VIOLET,
-  &layer4,
-};
-
 
 Layer fieldLayer = {		/* playing field as a layer */
   (AbShape *) &fieldOutline,
   {screenWidth/2, screenHeight/2},/**< center */
   {0,0}, {0,0},				    /* last & next pos */
   COLOR_BLACK,
-  0
+  &layer0
+};
+ 
+Layer layer1 = { //contains left paddle
+    (AbShape *)&left_paddle,
+    {(screenWidth/2)-50, (screenHeight/2) - 52},
+    {0,0}, {0,0},		    
+    COLOR_WHITE,
+    &fieldLayer,
 };
 
-Layer layer1 = {		/**< Layer with a red square */
-  (AbShape *)&ball,
-  {screenWidth/2, screenHeight/2}, /**< center */
-  {0,0}, {0,0},				    /* last & next pos */
-  COLOR_RED,
-  &fieldLayer,
+Layer layer2 = { //contains right paddle
+  (AbShape *)&right_paddle,
+  {(screenWidth/2)+48, (screenHeight/2) + 51},
+  {0,0}, {0,0},		    
+  COLOR_WHITE,
+  &layer1,
 };
 
-//Layer layer0 = {		/**< Layer with an orange circle */
-//(AbShape *)&circle14,
-  //{(screenWidth/2)+10, (screenHeight/2)+5}, /**< bit below & right of center */
-  // {0,0}, {0,0},				    /* last & next pos */
-	 // COLOR_ORANGE,
-  // &layer1,
-  //};
+
+Layer layer3 = { //contains right paddle
+  (AbShape *)&right_paddle,
+  {(screenWidth/2)+48, (screenHeight/2) + 51},
+  {0,0}, {0,0},		    
+  COLOR_WHITE,
+  &layer2,
+};
+
+
+
 /** Moving Layer
  *  Linked list of layer references
  *  Velocity represents one iteration of change (direction & magnitude)
@@ -89,12 +75,11 @@ typedef struct MovLayer_s {
   struct MovLayer_s *next;
 } MovLayer;
 
-/* initial value of {0,0} will be overwritten */
-MovLayer ml3 = { &padel_left, {5,0}, 0 }; /**< not all layers move */
-MovLayer ml0 = { &padel_right, {5,0}, &ml3 }; 
-//MovLayer ml1 = { &layer4, {2,1}, 0 };
-void movLayerDraw(MovLayer *movLayers, Layer *layers)
-{
+MovLayer ml0 = { &layer0, {0,0}, 0 };
+MovLayer ml1 = { &layer1, {0,0}, &ml0 };
+MovLayer ml2 = { &layer2, {0,0}, &ml1 };
+MovLayer ml3 = { &layer3, {0,0}, &ml2 };
+void movLayerDraw(MovLayer *movLayers, Layer *layers){
   int row, col;
   MovLayer *movLayer;
 
@@ -128,114 +113,202 @@ void movLayerDraw(MovLayer *movLayers, Layer *layers)
       } // for col
     } // for row
   } // for moving layer being updated
-}	  
+}
 
+int collision_detector(Vec2 *newPos, u_int axis){
 
+  int velocity2 = 0;
 
-//Region fence = {{10,30}, {SHORT_EDGE_PIXELS-10, LONG_EDGE_PIXELS-10}}; /**< Create a fence region */
+  //if the ball is touching any of the paddles
+  if(abShapeCheck(ml1.layer->abShape,&ml1.layer->posNext, newPos) ||
+     (abShapeCheck(ml2.layer->abShape,&ml2.layer->posNext, newPos))){
+    
+    //change the volocity of the ball to the opposite velocity
+    velocity2 = ml0.velocity.axes[axis] = -ml0.velocity.axes[axis];
+    return velocity2;
+  }
+}
 
-/** Advances a moving shape within a fence
- *  
- *  \param ml The moving shape to be advanced
- *  \param fence The region which will serve as a boundary for ml
- */
 void mlAdvance(MovLayer *ml, Region *fence)
 {
   Vec2 newPos;
   u_char axis;
+  u_char counter,counter2;
   Region shapeBoundary;
+   
   for (; ml; ml = ml->next) {
+
     vec2Add(&newPos, &ml->layer->posNext, &ml->velocity);
     abShapeGetBounds(ml->layer->abShape, &newPos, &shapeBoundary);
+    counter =0;
+    counter2 =0;
+
     for (axis = 0; axis < 2; axis ++) {
-      if ((shapeBoundary.topLeft.axes[axis] < fence->topLeft.axes[axis]) ||
-	  (shapeBoundary.botRight.axes[axis] > fence->botRight.axes[axis]) ) {
+      
+      //checks collision between figures and fence, normal procedure of the original method
+      if (shapeBoundary.topLeft.axes[axis] < fence->topLeft.axes[axis]){
+      	int velocity = ml->velocity.axes[axis] = -ml->velocity.axes[axis];
+	newPos.axes[axis] += (2*velocity);
+       
+	//Updating the score, p1 scores
+	if(ml->layer->abShape == ml0.layer->abShape & (counter <1)){
+
+	    scorep1 +=1;
+	    counter +=1;
+	}
+      }
+
+      else if (shapeBoundary.botRight.axes[axis] > fence->botRight.axes[axis]){
 	int velocity = ml->velocity.axes[axis] = -ml->velocity.axes[axis];
 	newPos.axes[axis] += (2*velocity);
-      }	/**< if outside of fence */
-    } /**< for axis */
-    ml->layer->posNext = newPos;
-  } /**< for ml */
+	
+	//Updating the score, p2 scores
+	if (ml->layer->abShape == ml0.layer->abShape & (counter2 <1)){
+	  scorep2 += 1;
+	  counter2 += 1;
+	  play = 1;
+	}
+	
+      }
+      
+      /* Second part of the updated method, checks for collision between the ball and the paddles,         in order to do so it checks if the ball shape equals to the actual moving layer, so it can         collide */
+
+      if (ml->layer->abShape == ml0.layer->abShape){
+	int velocity = collision_detector(&newPos,axis);
+	newPos.axes[axis] += (2*velocity);
+      }
+      
+    ml->layer->posNext = newPos; //advance to the next layer
+    }
+  }
 }
 
-
-u_int bgColor = COLOR_GREEN;     /**< The background color */
-int redrawScreen = 1;           /**< Boolean for whether screen needs to be redrawn */
-
-Region fieldFence;		/**< fence around playing field  */
-
+u_int bgColor = COLOR_BLACK;
+int redrawScreen =1;
+Region fieldFence;
 
 /** Initializes everything, enables interrupts and green LED, 
  *  and handles the rendering for the screen
  */
 void main()
-{
+{  
   P1DIR |= GREEN_LED;		/**< Green led on when CPU on */		
   P1OUT |= GREEN_LED;
 
+  int i = 0;
   configureClocks();
   lcd_init();
+  buzzer_init();
+  buzzer_set_period(0);
   shapeInit();
-  p2sw_init(1);
-
+  p2sw_init(15);
   shapeInit();
-
-  layerInit(&padel_right);
-  layerDraw(&padel_right);
-
-
+  layerInit(&layer2);
+  layerDraw(&layer2);
   layerGetBounds(&fieldLayer, &fieldFence);
-
-
   enableWDTInterrupts();      /**< enable periodic interrupt */
   or_sr(0x8);	              /**< GIE (enable interrupts) */
-  drawString5x7(0,0, "P1 SCORE: ", COLOR_WHITE, COLOR_GREEN);
-  drawString5x7(72,152,":SCORE P2 ", COLOR_WHITE, COLOR_GREEN);
-  for(;;) { 
+
+  for(;;) {
     while (!redrawScreen) { /**< Pause CPU if screen doesn't need updating */
       P1OUT &= ~GREEN_LED;    /**< Green led off witHo CPU */
       or_sr(0x10);	      /**< CPU OFF */
     }
-    P1OUT |= GREEN_LED;       /**< Green led on when CPU on */
-    redrawScreen = 0;
-    movLayerDraw(&ml0, &padel_right);
-  }
-}
-
-/** Watchdog timer interrupt handler. 15 interrupts/sec */
-void wdt_c_handler()
-{
-  static short count = 0;
-  P1OUT |= GREEN_LED;		      /**< Green LED on when cpu on */
-  count ++;
-  if (count == 15) {
+    //update the score only if it counces on the player's contrary fence
+    if(scorep1)
+      drawChar5x7(30,0,'0' + scorep2, COLOR_WHITE, bgColor);
     
-
-
-  for(;;) { 
-    while (!redrawScreen) { /**< Pause CPU if screen doesn't need updating */
-      P1OUT &= ~GREEN_LED;    /**< Green led off witHo CPU */
-      or_sr(0x10);	      /**< CPU OFF */
-    }
+    if(scorep2)
+      drawChar5x7(90, 0, '0' + scorep1, COLOR_WHITE, bgColor);
+       
     P1OUT |= GREEN_LED;       /**< Green led on when CPU on */
     redrawScreen = 0;
-    movLayerDraw(&ml0, &padel_right);
+    movLayerDraw(&ml2, &layer2);
+
   }
 }
 
 /** Watchdog timer interrupt handler. 15 interrupts/sec */
 void wdt_c_handler()
 {
+  static int i = 0;
+  static int j = 0;
   static short count = 0;
+  static short song[] = {1000, 1200, 1500, 1700, 1900};
+  static short song2[] = {1000, 1100, 1100, 1100, 1100, 1100, 1100};
   P1OUT |= GREEN_LED;		      /**< Green LED on when cpu on */
   count ++;
-  if (count == 15) {
-    //int switches = ~p2sw_read();    
-    mlAdvance(&ml0, &fieldFence);
-    if (p2sw_read()){
-      redrawScreen = 1;
+  int speed = 4;
+  //int switches = ~p2sw_read();
+  if (count == 10) {
+    mlAdvance(&ml2, &fieldFence);
+    if(j < 7){
+      buzzer_set_period(song2[j++]);
+    }else{
+      j =0;
     }
-    count = 0;
-  } 
+    /*LEFT PADDLE CONTROLLER */
+    
+    int switches = ~p2sw_read();
+
+    if(i < sizeof(song) & play){
+      buzzer_set_period(song[i++]);
+    }
+    else{
+      i = 0;
+      play = 0;
+    }
+    
+    if (switches & BIT0){ //going down
+      if(start == 0){
+	start = 1;
+	ml0.velocity.axes[0] = speed;
+	ml0.velocity.axes[1] = speed;
+      }
+      ml1.velocity.axes[1] = 4;
+    }
+    
+    else if (switches & BIT1){ //going up
+      ml1.velocity.axes[1] = -4;
+    }
+  /* RIGHT PADDLE CONTROLLER */
+    
+    else if (switches & BIT2){ //going down
+      ml2.velocity.axes[1] = 4;
+    }
+
+    else if (switches & BIT3){ //going up
+      ml2.velocity.axes[1] = -4;
+    }
+    
+    //Reseting the velocity so that it would not move by its own, only when a button is pressed
+    else{
+      ml1.velocity.axes[1] = 0;
+      ml2.velocity.axes[1] = 0;
+    }
+
+    if(scorep1 == 5 || scorep2 == 5){
+      drawString5x7(50, 50, "you won!!\n", COLOR_WHITE, COLOR_BLACK);
+      
+      ml0.velocity.axes[1] = 0;
+      ml0.velocity.axes[0] = 0;
+      start = 0;
+      drawString5x7(50, 70, "play again?", COLOR_WHITE, COLOR_BLACK);
+      if(switches & BIT0){
+	//drawString5x7(50, 30, "another one!", COLOR_WHITE, COLOR_BLACK);
+	start = 1;
+	ml0.velocity.axes[0] = speed++;
+	ml0.velocity.axes[1] = speed++;
+
+	drawString5x7(50, 70, "           ", COLOR_WHITE, COLOR_BLACK);
+      
+	drawString5x7(50, 50, "           ", COLOR_WHITE, COLOR_BLACK);
+	scorep1 = 0;
+	scorep2 = 0;
+      }
+    }
+    redrawScreen =1; // False
+    count =0;
+  }
   P1OUT &= ~GREEN_LED;		    /**< Green LED off when cpu off */
-}}
+}
