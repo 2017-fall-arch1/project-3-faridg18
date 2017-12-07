@@ -8,22 +8,24 @@
 
 #define GREEN_LED BIT6;
 
-char scorep1 = 0;
-char scorep2 = 0;
+u_int scorep1 = 0;
+u_int scorep2 = 0;
+u_int start = 0;
 
-AbRect left_paddle = {abRectGetBounds, abRectCheck,{5,18}};
-AbRect right_paddle = {abRectGetBounds, abRectCheck,{5,18}};
+AbRect left_paddle = {abRectGetBounds, abRectCheck,{3,19}};
+AbRect right_paddle = {abRectGetBounds, abRectCheck,{3,19}};
+AbRect ball = {abRectGetBounds, abRectCheck, {3,3}};
 
 AbRectOutline fieldOutline = {	/* playing field */
   abRectOutlineGetBounds, abRectOutlineCheck,   
-  {screenWidth/2 - 10, screenHeight/2 - 10}
+  {screenWidth/2 - 1, screenHeight/2 - 1}
 };
 
 Layer layer0 = {	//contains the ball      
-  (AbShape *)&circle8,
+  (AbShape *)&ball,
   {(screenWidth/2)+10, (screenHeight/2)+5},
   {0,0}, {0,0},			  
-  COLOR_BLUE,
+  COLOR_WHITE,
   0
 };
 
@@ -31,13 +33,13 @@ Layer fieldLayer = {		/* playing field as a layer */
   (AbShape *) &fieldOutline,
   {screenWidth/2, screenHeight/2},/**< center */
   {0,0}, {0,0},				    /* last & next pos */
-  COLOR_GREEN,
+  COLOR_BLACK,
   &layer0
 };
  
 Layer layer1 = { //contains left paddle
     (AbShape *)&left_paddle,
-    {(screenWidth/2)-48, (screenHeight/2) - 51},
+    {(screenWidth/2)-50, (screenHeight/2) - 52},
     {0,0}, {0,0},		    
     COLOR_WHITE,
     &fieldLayer,
@@ -61,10 +63,10 @@ typedef struct MovLayer_s {
   struct MovLayer_s *next;
 } MovLayer;
 
-MovLayer ml0 = { &layer0, {3,3}, 0 };
+MovLayer ml0 = { &layer0, {0,0}, 0 };
 MovLayer ml1 = { &layer1, {0,0}, &ml0 };
 MovLayer ml2 = { &layer2, {0,0}, &ml1 };
-
+MovLayer ml3 = { &layer2, {0,0}, &ml2 };
 void movLayerDraw(MovLayer *movLayers, Layer *layers){
   int row, col;
   MovLayer *movLayer;
@@ -194,8 +196,8 @@ void main()
   enableWDTInterrupts();      /**< enable periodic interrupt */
   or_sr(0x8);	              /**< GIE (enable interrupts) */
 
-  drawString5x7(0,0, "P1 SCORE: ", COLOR_RED, COLOR_BLACK);
-  drawString5x7(72,152,":SCORE P2 ", COLOR_RED, COLOR_BLACK);
+  drawString5x7(0,0, " P1 SCORE  " , COLOR_WHITE, bgColor);
+  drawString5x7(62,152, " P2  SCORE " , COLOR_WHITE, bgColor);
   
   for(;;) {
     while (!redrawScreen) { /**< Pause CPU if screen doesn't need updating */
@@ -204,10 +206,10 @@ void main()
     }
     //update the score only if it counces on the player's contrary fence
     if(scorep1)
-      drawChar5x7(59,0,'0' + scorep2, COLOR_RED, COLOR_BLACK);
+      drawChar5x7(59,0,'0' + scorep2, COLOR_WHITE, bgColor);
     
     if(scorep2)
-      drawChar5x7(63,152, '0' + scorep1, COLOR_RED, COLOR_BLACK);
+      drawChar5x7(63,152, '0' + scorep1, COLOR_WHITE, bgColor);
        
     P1OUT |= GREEN_LED;       /**< Green led on when CPU on */
     redrawScreen = 0;
@@ -223,7 +225,7 @@ void wdt_c_handler()
   P1OUT |= GREEN_LED;		      /**< Green LED on when cpu on */
   count ++;
   //int switches = ~p2sw_read();
-  if (count == 15) {
+  if (count == 10) {
     mlAdvance(&ml2, &fieldFence);
 
     /*LEFT PADDLE CONTROLLER */
@@ -231,20 +233,25 @@ void wdt_c_handler()
     int switches = ~p2sw_read();
     
     if (switches & BIT0){ //going down
-      ml1.velocity.axes[1] = 3;
+      if(start == 0){
+	start = 1;
+	ml0.velocity.axes[0] = 4;
+	ml0.velocity.axes[1] = 4;
+      }
+      ml1.velocity.axes[1] = 4;
     }
     
     else if (switches & BIT1){ //going up
-      ml1.velocity.axes[1] = -3;
+      ml1.velocity.axes[1] = -4;
     }
   /* RIGHT PADDLE CONTROLLER */
     
     else if (switches & BIT2){ //going down
-      ml2.velocity.axes[1] = 3;
+      ml2.velocity.axes[1] = 4;
     }
 
     else if (switches & BIT3){ //going up
-      ml2.velocity.axes[1] = -3;
+      ml2.velocity.axes[1] = -4;
     }
     
     //Reseting the velocity so that it would not move by its own, only when a button is pressed
@@ -252,10 +259,25 @@ void wdt_c_handler()
       ml1.velocity.axes[1] = 0;
       ml2.velocity.axes[1] = 0;
     }
+
+    if(scorep1 == 5 || scorep2 == 5){
+      drawString5x7(50, 50, "you won!!\n", COLOR_WHITE, COLOR_BLACK);
+      
+      ml0.velocity.axes[1] = 0;
+      ml0.velocity.axes[0] = 0;
+      start = 0;
+      drawString5x7(50, 70, "play again?\n", COLOR_WHITE, COLOR_BLACK);
+      if(switches & BIT0){
+	drawString5x7(50, 30, "another one!\n", COLOR_WHITE, COLOR_BLACK);
+	start = 1;
+	ml0.velocity.axes[0] = 4;
+	ml0.velocity.axes[1] = 4;
+	scorep1 = 0;
+	scorep2 = 0;
+      }
+    }
     redrawScreen =1; // False
     count =0;
   }
-  
-  
   P1OUT &= ~GREEN_LED;		    /**< Green LED off when cpu off */
 }
